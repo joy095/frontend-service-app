@@ -4,22 +4,32 @@ import {
   fetchBaseQuery,
   FetchArgs,
   BaseQueryApi,
-  FetchBaseQueryError, // Import FetchBaseQueryError for type checking error details
+  FetchBaseQueryError,
+  FetchBaseQueryMeta,
+  // ... other RTK Query types if needed
 } from "@reduxjs/toolkit/query/react";
 import { Mutex } from "async-mutex";
-import { logout, setAuthData } from "../store/authSlice"; // Adjust path if needed
+// *** Import only the actions needed in apiSlice (logout, setAuthData) ***
+import { logout, setAuthData } from "../store/auth/authSlice";
 import {
-  User,
-  RefreshTokenResponse, // Assuming this type is correct if your refresh endpoint returns more than tokens
+  User, // User type (for nested object, based on API response)
+  GetUserResponse, // GetUserResponse type (for the overall getUser API response)
   BaseQueryExtraOptions,
   LoginCredentials,
   LoginResponse, // Assuming this type is correct for your login endpoint response
-  TokensPayload, // Type for the token structure in Redux state
-  LoginApiResponseTokens, // Assuming this type is correct for nested tokens from your API
-  AuthDataPayload, // Assuming this type is correct for the setAuthData action payload
-} from "../types"; // Adjust path if needed
+  TokensPayload, // Type for the token structure in Redux state (camelCase for Redux)
+  LoginApiResponseTokens, // Assuming this type is correct for nested tokens from your API (snake_case)
+  AuthDataPayload, // Import AuthDataPayload (ensure user property allows User | null | undefined)
+} from "../types"; // Adjust path and ensure types match your API and Redux state
 import { BASE_URL } from "@/src/utils/constants";
-import { RootState } from "../store/store"; // Import RootState type (no 'store' value import)
+import { RootState } from "../store/store"; // Import RootState type
+
+
+// *** REMOVE hydrateAuthState ASYNC THUNK FROM HERE ***
+// *** It belongs in src/store/auth/authSlice.ts and should use your storage utility ***
+// import { createAsyncThunk } from "@reduxjs/toolkit";
+// export const hydrateAuthState = createAsyncThunk(...) // Delete this block
+
 
 // Create a new mutex to prevent multiple token refresh attempts at once
 const mutex = new Mutex();
@@ -30,17 +40,19 @@ const baseQuery = fetchBaseQuery({
   prepareHeaders: (headers, { getState, extra }) => {
     const state = getState() as RootState; // Type getState result
     const accessToken = state.auth.accessToken;
-    const typedExtra = extra as BaseQueryExtraOptions | undefined; // Type extra
+    const typedExtra = extra as BaseQueryExtraOptions | undefined;
 
     // If we have a token AND this is NOT the refresh request AND NOT explicitly an unauthenticated request, add the auth header
     // requiresAuth defaults to true, so we check if it's explicitly false
     if (
       accessToken &&
-      typedExtra?.isRefresh !== true &&
-      typedExtra?.requiresAuth !== false
+      typedExtra?.isRefresh !== true && // Exclude the refresh request itself
+      typedExtra?.requiresAuth !== false // Exclude explicitly unauthenticated requests
     ) {
       headers.set("Authorization", `Bearer ${accessToken}`);
     }
+
+    // Note: The Refresh-Token header for the refresh endpoint is set directly in the baseQuery call in baseQueryWithReauth
 
     return headers;
   },
@@ -52,83 +64,170 @@ const baseQueryWithReauth = async (
   api: BaseQueryApi, // This provides getState and dispatch
   extraOptions: BaseQueryExtraOptions = {} // Default to empty object
 ) => {
-  const typedExtra = extraOptions as BaseQueryExtraOptions; // Cast for easier access
+  console.log("baseQueryWithReauth CALLED for:", args); // Log 1
+
+  const typedExtra = extraOptions as BaseQueryExtraOptions;
 
   // Skip 401 handling for endpoints that explicitly don't require auth (like login)
-  if (typedExtra?.requiresAuth === false && typedExtra?.isRefresh !== true) {
-    // Just perform the request and return the result without checking for 401
+  if (typedExtra?.requiresAuth === false) {
+    console.log(
+      "baseQueryWithReauth: Skipping auth/refresh logic for unauthenticated endpoint:",
+      args
+    ); // Log 2
+    // *** baseQuery expects 3 arguments: args, api, extraOptions ***
+    // Pass extraOptions as the 3rd argument for non-auth calls
     return baseQuery(args, api, extraOptions);
   }
 
   // For authenticated endpoints, wait until the mutex is available without locking it
   await mutex.waitForUnlock();
+  console.log("baseQueryWithReauth: Mutex unlocked for:", args); // Log 3
+
 
   // Perform the original request
-  let result = await baseQuery(args, api, extraOptions);
+  // *** baseQuery expects 3 arguments: args, api, extraOptions ***
+  let result = await baseQuery(args, api, extraOptions); // Pass extraOptions as the 3rd argument
+  console.log(
+    "baseQueryWithReauth: Original request result for",
+    args,
+    ":",
+    result
+  ); // Log 4
 
-  // Check if the request failed with a 401 error (including parsing errors over 401)
+
+  // Check if the request failed with a 401 error
   const isUnauthorized =
     result.error &&
-    (result.error.status === 401 || // Standard 401 status
-      (result.error.status === "PARSING_ERROR" && // Or a parsing error...
-        // ...where the original HTTP status was 401
-        (result.error as any)?.originalStatus === 401)); // Need to cast for originalStatus
+    (result.error.status === 401 ||
+      (result.error.status === "PARSING_ERROR" &&
+        (result.error as any)?.originalStatus === 401));
+
+  console.log(
+    "baseQueryWithReauth: Is Unauthorized?",
+    isUnauthorized,
+    "for",
+    args
+  ); // Log 5
 
   if (isUnauthorized) {
     console.log(
-      "Unauthorized error (status 401 or parsing error over 401) - Attempting token refresh..."
-    );
+      "baseQueryWithReauth: Unauthorized detected, attempting refresh for:",
+      args
+    ); // Log 6
 
-    // acquire the mutex to block other requests from refreshing
     const release = await mutex.acquire();
+    console.log("baseQueryWithReauth: Mutex acquired for refresh attempt."); // Log 7
+
+    // Capture the access token that was used in the original failed request
+    // This should be the expired token from the state *before* mutex acquisition
+    const originalAccessToken = (api.getState() as RootState).auth.accessToken;
+    console.log(
+      "baseQueryWithReauth: Original Access Token that failed:",
+      originalAccessToken ? "Present" : "Missing"
+    ); // Log 8
+
+
+    // *** FIX: Declare refreshToken with let OUTSIDE the try block ***
+    let refreshToken: string | null = null;
+
 
     try {
-      const state = api.getState() as RootState; // Get the current state using api.getState()
-      const refreshToken = state.auth.refreshToken;
+      const state = api.getState() as RootState; // Get the current state
+      // *** Assign to the variable declared outside ***
+      refreshToken = state.auth.refreshToken; // Use assignment here
 
-      // Check if a refresh attempt is still needed after acquiring the mutex
-      // Another request might have successfully refreshed in the meantime
-      // This check should use the state *after* acquiring the mutex
+
       const stateAfterMutex = api.getState() as RootState;
-      if (stateAfterMutex.auth.accessToken) {
-        console.log(
-          "Token already refreshed by another request while waiting for mutex. Retrying original request."
-        );
-        // Token is already refreshed, release mutex and retry the original query
-        release();
-        result = await baseQuery(args, api, extraOptions); // Retry original query
-      } else if (!refreshToken) {
-        // If there's no access token and no refresh token, cannot refresh
-        console.error(
-          "No refresh token found after mutex release. Refresh not possible."
-        );
-        api.dispatch(logout()); // Ensure logged out state
-        return result; // Return the original 401 or parsing error
-      } else {
-        // Proceed with the refresh because no valid access token was found after mutex lock
-        console.log("Proceeding with token refresh...");
-        const refreshResult = await baseQuery(
-          {
-            url: "/refresh-token", // <--- Your refresh token endpoint
-            method: "POST",
-            body: {
-              refreshToken: refreshToken, // <--- Body structure might vary based on your API
-            },
-          },
-          api,
-          {
-            ...extraOptions,
-            isRefresh: true, // Mark this request as the refresh request
-            requiresAuth: false, // Refresh endpoint usually doesn't require auth header itself
-          } as BaseQueryExtraOptions // Cast extraOptions
-        );
+      const accessTokenAfterMutex = stateAfterMutex.auth.accessToken;
 
-        // --- Handle Refresh Response ---
-        // Assuming the refresh response returns new tokens, potentially nested or flat
+
+      console.log(
+        "baseQueryWithReauth: Refresh Token in state:",
+        refreshToken ? "Present" : "Missing"
+      ); // Log 9
+      console.log(
+        "baseQueryWithReauth: Access Token in state (after mutex acquire):",
+        accessTokenAfterMutex ? "Present" : "Missing"
+      ); // Log 10
+
+
+      // *** FIX: Check if the access token is present AND different from the original failed one ***
+      if (
+        accessTokenAfterMutex &&
+        accessTokenAfterMutex !== originalAccessToken
+      ) {
+        // Path 1: Token has been updated by another request while waiting for mutex
+        console.log(
+          "baseQueryWithReauth: Path 1 - Token updated by another request while waiting for mutex. Retrying original."
+        ); // Log 11
+        release(); // Release before retrying
+        // *** baseQuery expects 3 arguments: args, api, extraOptions ***
+        result = await baseQuery(args, api, extraOptions); // Retry original query
+        console.log(
+          "baseQueryWithReauth: Result of retried original query (Path 1):",
+          result
+        ); // Log 12
+
+      } else if (!refreshToken) {
+        // *** FIX: refreshToken is now accessible here ***
+        // Path 2: No refresh token available
+        console.error(
+          "baseQueryWithReauth: Path 2 - No refresh token found. Logging out."
+        ); // Log 13
+        api.dispatch(logout()); // Log out if no refresh token
+        // Return the original 401
+        result = result; // Keep the original error result
+        console.log(
+          "baseQueryWithReauth: Returning original error and logging out (Path 2)."
+        ); // Log 14
+
+      } else {
+        // Path 3: *** Proceed with refresh ***
+        console.log(
+          "baseQueryWithReauth: Path 3 - Proceeding with token refresh..."
+        ); // Log 15
+
+        // *** Log the exact value AND type of refreshToken before using it ***
+        console.log(
+          "baseQueryWithReauth: Path 3 - refreshToken value:",
+          refreshToken,
+          "Type:",
+          typeof refreshToken
+        ); // Log 16 (was Log 20)
+
+
+        // Make the refresh token request
+        // *** Pass an explicit empty object for the third argument to baseQuery for THIS call ***
+        const refreshResult = await baseQuery(
+          { // Arg 1
+            url: "/refresh-token",
+            method: "POST",
+            body: {}, // Using empty object body
+            headers: {
+              "Refresh-Token": refreshToken, // Using refreshToken here (now guaranteed accessible & hopefully string)
+              "Content-Type": "application/json",
+            },
+            // The extraOptions *for this specific request* are correctly inside FetchArgs
+            extraOptions: {
+              isRefresh: true,
+              requiresAuth: false,
+            } as BaseQueryExtraOptions,
+          } as FetchArgs, // End Arg 1
+          api, // Arg 2
+          {} // *** FIX: Pass explicit empty object {} as the third argument here *** // Arg 3
+        );
+        console.log(
+          "baseQueryWithReauth: Refresh request result (Path 3):",
+          refreshResult
+        ); // Log 17
+
+
+        // --- Handle Refresh Response (Path 3) ---
+        // ... (Your existing refresh handling logic using refreshResult.data) ...
         const refreshTokensData = refreshResult.data as
-          | { tokens?: LoginApiResponseTokens } // Example: { tokens: { access_token, refresh_token } }
-          | TokensPayload // Example: { accessToken, refreshToken } (if backend returns camelCase)
-          | undefined; // Handle potential empty or unexpected response
+          | { tokens?: LoginApiResponseTokens }
+          | TokensPayload
+          | undefined;
 
         let newAccessToken: string | null = null;
         let newRefreshToken: string | null = null;
@@ -136,70 +235,70 @@ const baseQueryWithReauth = async (
         if (
           refreshTokensData &&
           "tokens" in refreshTokensData &&
-          refreshTokensData.tokens // Ensure tokens property exists and is not null/undefined
+          refreshTokensData.tokens
         ) {
-          // Extract from nested snake_case structure
           newAccessToken = refreshTokensData.tokens.access_token;
           newRefreshToken = refreshTokensData.tokens.refresh_token;
         } else if (refreshTokensData && "accessToken" in refreshTokensData) {
-          // Handle case where refresh endpoint might return camelCase directly
-          newAccessToken = (refreshTokensData as TokensPayload).accessToken; // Cast to TokensPayload for direct access
+          newAccessToken = (refreshTokensData as TokensPayload).accessToken;
           newRefreshToken = (refreshTokensData as TokensPayload).refreshToken;
         }
-        // --- End Handle Refresh Response ---
+        // --- End Handle Refresh Response (Path 3) ---
 
-        if (newAccessToken && newRefreshToken) {
+
+        if (
+          refreshResult.meta?.response?.status === 200 && // Check HTTP status
+          newAccessToken && // Check if access token was successfully extracted
+          newRefreshToken // Check if refresh token was successfully extracted
+        ) {
           console.log(
-            "Token refresh successful. Updating tokens and retrying original request."
-          );
+            "baseQueryWithReauth: Refresh successful, dispatching setAuthData and retrying original request (Path 3)."
+          ); // Log 18
 
-          // Get the current user data from state *after* successful refresh, before dispatching
+          // Get existing user data from state to preserve it if needed by setAuthData
           const currentStateAfterRefresh = api.getState() as RootState;
-          const currentUserDataAtRefresh = currentStateAfterRefresh.auth.user; // This is User | null
+          const currentUserDataAtRefresh = currentStateAfterRefresh.auth.user; // User | null
 
-          // Dispatch setAuthData with both new tokens and the current user data
-          if (currentUserDataAtRefresh !== null) {
-            api.dispatch(
-              setAuthData({
-                tokens: {
-                  // Nested tokens as per AuthDataPayload
-                  accessToken: newAccessToken,
-                  refreshToken: newRefreshToken,
-                },
-              })
-            );
-
-            // Retry the original query with the new tokens (prepareHeaders will use the updated state)
-            result = await baseQuery(args, api, extraOptions);
-          } else {
-            // This is an unusual state - refresh succeeded but user data is missing
-            console.error(
-              "Token refresh succeeded, but user data is unexpectedly null in state. Logging out."
-            );
-            api.dispatch(logout()); // Log out if user data is missing
-            // Return an error indicating the problem
-            result = {
-              error: { status: 401, data: "User data missing after refresh" },
-            }; // Example error format
-          }
-        } else {
-          console.error(
-            "Token refresh failed or returned unexpected structure.",
-            refreshResult
+          api.dispatch(
+            setAuthData({
+              tokens: {
+                accessToken: newAccessToken,
+                refreshToken: newRefreshToken,
+              },
+              user: currentUserDataAtRefresh, // This is type-safe if AuthDataPayload is updated
+              isAuthenticated: true,
+            })
           );
-          // If refresh failed or didn't return tokens, log out the user
-          api.dispatch(logout());
-          // Return the error from the refresh attempt
-          result = refreshResult;
+
+          // Retry the original query
+          console.log("baseQueryWithReauth: Retrying original request:", args); // Log 19
+          // *** baseQuery expects 3 arguments: args, api, extraOptions ***
+          result = await baseQuery(args, api, extraOptions); // Pass original extraOptions here for the retry
+          console.log(
+            "baseQueryWithReauth: Result of retried original query (Path 3):",
+            result
+          ); // Log 20
+
+
+        } else {
+          // Refresh failed (status not 200 or tokens missing from response)
+          console.error(
+            "baseQueryWithReauth: Refresh failed or invalid response. Logging out (Path 3).",
+            refreshResult
+          ); // Log 21
+          api.dispatch(logout()); // Log out if refresh failed or tokens weren't in response
+          result = refreshResult; // Return the refresh error
         }
-      } // End else block for proceeding with refresh
+        // --- End Path 3 Logic ---
+
+      } // End else block for Path 3
     } finally {
-      // release the mutex whether or not the refresh was successful
-      release();
+      release(); // Always release the mutex
+      console.log("baseQueryWithReauth: Mutex released."); // Log 22
     }
   }
 
-  // Return the result of the original request (or the retry, or the refresh error)
+  // Return the final result (original error, retry success, retry error, or refresh error)
   return result;
 };
 
@@ -207,75 +306,98 @@ export const apiSlice = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth, // Use our custom base query
   endpoints: (builder) => ({
-    // Example endpoint to get user data (requires auth by default)
-    getUser: builder.query<User, string>({
+    // *** Use the correct return type GetUserResponse ***
+    getUser: builder.query<GetUserResponse, string>({
       query: (username) => `/user/${username}`,
-      // ...
+      extraOptions: { requiresAuth: true } as BaseQueryExtraOptions, // Mark as requiring auth
     }),
 
-    // Login Mutation
+    // Login Mutation (does not require auth header for itself)
     login: builder.mutation<LoginResponse, LoginCredentials>({
-      // Type response and payload
       query: (credentials) => ({
-        url: "/login", // <--- Your login endpoint
+        url: "/login", // Your login endpoint
         method: "POST",
         body: credentials,
-        // Add extra option to tell baseQueryWithReauth NOT to apply 401 refresh logic
-        extraOptions: { requiresAuth: false } as BaseQueryExtraOptions,
+        extraOptions: { requiresAuth: false } as BaseQueryExtraOptions, // Mark as NOT requiring auth
       }),
-      // Use onQueryStarted to handle the side effect (dispatching setAuthData)
+      // Use onQueryStarted to handle the side effect (dispatching setAuthData on success)
       async onQueryStarted(credentials, { dispatch, queryFulfilled }) {
         try {
-          // 'data' will be of type LoginResponse { tokens: { access_token, refresh_token }, user: {...} }
-          const { data } = await queryFulfilled;
+          const { data } = await queryFulfilled; // Await the successful query result
           console.log("Login successful, received data structure:", data);
 
           // --- CORRECTLY EXTRACT TOKENS BASED ON API RESPONSE STRUCTURE ---
-          // Assuming login response has tokens nested and snake_case
+          // Assuming login response has tokens nested and snake_case (LoginResponse & LoginApiResponseTokens types)
           const accessToken = data.tokens.access_token;
           const refreshToken = data.tokens.refresh_token;
 
-          // Assuming login response also includes the user data at the top level
+          // Assuming login response also includes the user data at the top level (LoginResponse type)
           const userData = data.user;
           // --- End Extraction ---
 
           if (accessToken && refreshToken && userData) {
             console.log(
-              "Extracted tokens and user data, dispatching setAuthData."
+              "Extracted tokens and user data after login, dispatching setAuthData."
             );
-            // Dispatch setAuthData with tokens AND user data
+            // Dispatch setAuthData with the new tokens and user data
             dispatch(
               setAuthData({
                 tokens: {
-                  // Nested tokens (camelCase for Redux state)
-                  accessToken: accessToken,
-                  refreshToken: refreshToken,
+                  accessToken: accessToken, // camelCase for Redux state
+                  refreshToken: refreshToken, // camelCase for Redux state
                 },
-                user: userData, // Include user data from login response
+                user: userData, // userData is User, assignable to User | null | undefined
+                isAuthenticated: true, // Set authenticated status
               })
             );
-            // The _layout.tsx or similar navigation logic should watch the isAuthenticated state from Redux
-            // and handle navigation based on that state change (e.g., redirect to dashboard).
+            // The listener middleware will handle saving tokens and user data to storage
+
           } else {
             console.error(
               "Login successful but token data or user data was missing or unexpected in response."
             );
-            // Optionally dispatch logout or handle this as an error if tokens/user are mandatory
+            // If tokens/user data are mandatory for authentication, dispatch logout
             dispatch(logout()); // Log out if essential data is missing
           }
         } catch (error) {
           console.error("Login failed in onQueryStarted:", error);
           // Errors like invalid credentials will typically be handled by the component
-          // consuming the useLoginMutation hook (via the error property),
-          // but you could dispatch global notification actions here if needed.
-          // Ensure logout on login failure as a safety measure if not handled elsewhere
-          // dispatch(logout()); // Optional: May depend on desired UX for login failure
+          // consuming the useLoginMutation hook (via the error property).
+          // Optionally dispatch global notification actions here if needed.
+          // Consider dispatching logout on login failure depending on desired UX,
+          // but the consuming component usually handles displaying the error message.
+          // dispatch(logout()); // Example: force logout on any login query error
         }
       },
     }),
     // Add other endpoints here...
+    // Remember to add `extraOptions: { requiresAuth: false } as BaseQueryExtraOptions`
+    // for any endpoint that *doesn't* need auth headers (like registration, password reset request, etc.)
   }),
 });
 
+
 // Export typed hooks for use in components
 export const { useGetUserQuery, useLoginMutation } = apiSlice;
+
+
+// --- Cache Clearing on Logout ---
+// This part goes in your listener middleware setup (e.g., src/store/auth/authListeners.ts)
+/*
+import { createListenerMiddleware } from '@reduxjs/toolkit';
+import { logout } from './authSlice'; // Your logout action
+import { apiSlice } from '../services/apiSlice'; // Your apiSlice
+
+export const apiCacheResetMiddleware = createListenerMiddleware();
+
+apiCacheResetMiddleware.addListener({
+  actionCreator: logout,
+  effect: async (action, listenerApi) => {
+    console.log('Logout action received, resetting API cache.');
+    // Dispatch the RTK Query utility to reset the entire apiSlice state
+    listenerApi.dispatch(apiSlice.util.resetApiState());
+    console.log('RTK Query API state reset.');
+  },
+});
+*/
+// Then ensure apiCacheResetMiddleware.middleware is added to your store middleware

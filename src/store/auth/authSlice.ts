@@ -1,7 +1,7 @@
 // src/store/authSlice.ts
 import { createSlice, PayloadAction, createAsyncThunk } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AuthState, TokensPayload, User, AuthDataPayload } from "../types"; // Import types
+import { AuthState, User, AuthDataPayload } from "../../types"; // Import types
 
 // Async Thunk to load state from storage
 export const hydrateAuthState = createAsyncThunk(
@@ -96,6 +96,8 @@ const authSlice = createSlice({
     },
   },
 });
+
+
 
 export const { setAuthData, logout, setHydrated } = authSlice.actions; // Export the new action
 

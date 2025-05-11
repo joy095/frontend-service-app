@@ -17,7 +17,7 @@ export interface User {
     username: string;
     first_name: string;
     last_name: string;
-    age: string;   
+    age: string;
     // Add other properties here that match your API's nested user object
 }
 
@@ -53,17 +53,19 @@ export interface LoginCredentials {
     // Add any other fields required for login (e.g., deviceId)
 }
 
+// *** FIX: Update AuthDataPayload to explicitly allow null for the user property ***
 export interface AuthDataPayload {
     tokens: TokensPayload; // Access and Refresh tokens (camelCase for Redux)
-    user?: User; // User data
+    user?: User | null | undefined; // *** Change this line: Add | null ***
     isAuthenticated?: boolean;
-    isHydrated?: boolean;
+    isHydrated?: boolean; // This is typically managed directly in the slice, not passed in payload
 }
 
+// Your AuthState should already allow null for user, which is why currentUserDataAtRefresh is User | null
 export interface AuthState {
     accessToken: string | null,
     refreshToken: string | null,
     isAuthenticated: boolean,
-    user: User | null,
+    user: User | null, // User can be null in state
     isHydrated: boolean, // Initial state
 };

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { Provider, useSelector, useDispatch } from "react-redux"; // Import useDispatch
 import { store, RootState, AppDispatch } from "../src/store/store"; // Import store, RootState, AppDispatch
-import { hydrateAuthState } from '../src/store/authSlice'; // Import the async thunk
+import { hydrateAuthState } from '../src/store/auth/authSlice'; // Import the async thunk
 
 // Inner component handling navigation logic (wrapped by Provider)
 function RootLayoutNav() {

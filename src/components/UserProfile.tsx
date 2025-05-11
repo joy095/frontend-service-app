@@ -2,10 +2,9 @@
 import React from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import { useGetUserQuery } from "../services/apiSlice";
-import { FetchBaseQueryError } from "@reduxjs/toolkit/query";
 // *** Import the correct types ***
 // Import GetUserResponse for the hook's data type, and User for the nested object's type
-import { GetUserResponse, User } from "../types"; // User type is now the corrected one
+import { User } from "../types"; // User type is now the corrected one
 
 interface UserProfileProps {
   username: string | null | undefined;

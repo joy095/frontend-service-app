@@ -97,6 +97,8 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
 
   const [formState, setFormState] = useState({
+    firstName: "",
+    lastName: "",
     username: "",
     email: "",
     password: "",
@@ -104,6 +106,8 @@ export default function Register() {
   });
 
   const [errors, setErrors] = useState({
+    firstName: "",
+    lastName: "",
     username: "",
     email: "",
     password: "",
@@ -131,6 +135,8 @@ export default function Register() {
     try {
       await schema.validate(
         {
+          firstName: formState.firstName,
+          lastName: formState.lastName,
           username: formState.username,
           email: formState.email,
           password: formState.password,
@@ -138,7 +144,7 @@ export default function Register() {
         { abortEarly: false }
       );
 
-      setErrors({ username: "", email: "", password: "" });
+      setErrors({ firstName: "", lastName: "", username: "", email: "", password: "" });
 
       const { accessToken, refreshToken } = await register(
         formState.username,
@@ -192,6 +198,22 @@ export default function Register() {
       />
 
       <FormField
+        value={formState.firstName}
+        onChangeText={(text) => updateFormState("firstName", text)}
+        placeholder="Jason"
+        error={errors.firstName}
+        autoCapitalize="none"
+      />
+
+      <FormField
+        value={formState.lastName}
+        onChangeText={(text) => updateFormState("lastName", text)}
+        placeholder="Paul"
+        error={errors.lastName}
+        autoCapitalize="none"
+      />
+
+      <FormField
         value={formState.email}
         onChangeText={(text) => updateFormState("email", text)}
         placeholder="Email"
@@ -207,6 +229,8 @@ export default function Register() {
         toggleSecureEntry={toggleSecureEntry}
         error={errors.password}
       />
+
+      
 
       <Pressable
         onPress={handleRegister}
