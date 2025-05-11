@@ -11,8 +11,8 @@ import {
 import { Link, useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Feather } from "@expo/vector-icons";
-import { register } from "../../utils/api";
-import { storeTokens } from "../../utils/auth";
+import { register } from "../../src/utils/api";
+import { storeTokens } from "../../src/utils/auth";
 import { ScrollView } from "react-native-gesture-handler";
 import * as Yup from "yup";
 

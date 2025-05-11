@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,23 +12,30 @@ import {
 import { Link, useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Feather } from "@expo/vector-icons";
-import { login } from "../../utils/api";
-import { storeTokens } from "../../utils/auth";
+
+// Import the useLoginMutation hook from your RTK Query API slice
+import { useLoginMutation } from "../../src/services/apiSlice"; // <--- Adjust the import path as needed (e.g., ../api/user or ../services/apiSlice)
+
+// We will rely on onQueryStarted in the API slice dispatching setTokens to Redux.
+// Your _layout.tsx should watch the Redux state (isAuthenticated).
+// We don't need to import setAuthToken here if it's only used by _layout and duplicates Redux state.
+// If setAuthToken does something ELSE crucial for _layout outside of Redux, you might keep it,
+// but watching Redux state directly is the standard pattern.
+// import { setAuthToken } from "../_layout"; // <-- Likely remove this import
+
 import { ScrollView } from "react-native-gesture-handler";
 import * as Yup from "yup";
+import { LoginCredentials } from "../../src/types"; // Import the type for credentials
+import { FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
+import { SerializedError } from '@reduxjs/toolkit'; // Import types for error
 
 // Yup validation schema
 const schema = Yup.object().shape({
   username: Yup.string().required("Username is required"),
-  password: Yup.string()
-    .matches(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/, {
-      message:
-        "Password must be at least 8 characters long and include a number.",
-    })
-    .required("Password is required"),
+  password: Yup.string().required("Password is required"),
 });
 
-// Custom form field component
+// Custom form field component (Keep this as is)
 const FormField = ({
   value,
   onChangeText,
@@ -84,6 +91,12 @@ const FormField = ({
 export default function Login() {
   const router = useRouter();
 
+  // Use the RTK Query login mutation hook
+  // loginMutationTrigger is the function to call to start the mutation
+  // { isLoading, isError, error } are states provided by the hook
+  const [loginMutationTrigger, { isLoading, isError, error }] = // Removed isSuccess, data from here
+    useLoginMutation();
+
   const [formState, setFormState] = useState({
     username: "",
     password: "",
@@ -96,7 +109,6 @@ export default function Login() {
   });
 
   const [generalError, setGeneralError] = useState("");
-  const [loading, setLoading] = useState(false);
 
   type FormField = keyof typeof errors;
   const updateFormState = (field: FormField, value: string) => {
@@ -113,47 +125,105 @@ export default function Login() {
     }));
   };
 
-  const handleRegister = async () => {
-    setLoading(true);
-    setGeneralError("");
+  // Helper to get a user-friendly error message from the RTK Query error object
+  const getErrorMessage = (err: FetchBaseQueryError | SerializedError | undefined): string => {
+    if (!err) return 'An unexpected error occurred.'; // Generic fallback
+
+    if ('status' in err) {
+      // This is a FetchBaseQueryError
+      if (typeof err.data === 'object' && err.data !== null && 'message' in err.data && typeof err.data.message === 'string') {
+        // Check if the backend returned a specific message in { message: "..." }
+        return err.data.message;
+      }
+      // Handle specific HTTP statuses if no custom message is found
+      if (err.status === 401 || err.status === 400) {
+        return 'Invalid credentials. Please check your username and password.';
+      }
+      if (err.status === 'FETCH_ERROR') {
+        return 'Network error. Please check your internet connection.';
+      }
+      // Fallback for other HTTP errors
+      return `Login failed with status: ${err.status}`;
+    } else if ('message' in err) {
+      // This is likely a SerializedError or a standard JS Error
+      return `An error occurred: ${err.message}`;
+    }
+
+    // Fallback for unknown error structure
+    return 'An unexpected error occurred.';
+  };
+
+
+  const handleLogin = async () => {
+    setGeneralError(""); // Clear any previous general errors
+
     try {
+      // Validate form inputs using Yup schema
       await schema.validate(
         {
           username: formState.username,
           password: formState.password,
         },
-        { abortEarly: false }
+        { abortEarly: false } // Collect all errors
       );
 
+      // If validation passes, clear field-specific errors
       setErrors({ username: "", password: "" });
 
-      const { accessToken, refreshToken } = await login(
-        formState.username,
-        formState.password
-      );
+      // Trigger the RTK Query login mutation
+      const credentials: LoginCredentials = {
+        username: formState.username,
+        password: formState.password,
+      };
 
-      await storeTokens(accessToken, refreshToken);
-      router.replace("/(tabs)");
+      // Use .unwrap() to handle success/error within this async function
+      // onQueryStarted in apiSlice handles the setTokens dispatch
+      const result = await loginMutationTrigger(credentials).unwrap();
+
+      // If we reach here, the login mutation was successful (onQueryStarted already ran)
+      console.log("Login successful via unwrap() in component.");
+
+      // --- Navigation handled by _layout.tsx ---
+      // _layout.tsx should be watching the isAuthenticated state in Redux.
+      // When isAuthenticated becomes true (due to setTokens dispatch),
+      // _layout.tsx should automatically handle the redirect, e.g., router.replace('/(tabs)').
+      // No need to manually navigate here if _layout is set up correctly.
+
     } catch (err) {
+      // Handle Yup validation errors OR RTK Query API errors caught by unwrap()
       if (err instanceof Yup.ValidationError) {
         const newErrors = { username: "", password: "" };
-
-        err.inner.forEach((validationError: Yup.ValidationError) => {
+        err.inner.forEach((validationError) => {
           if (validationError.path && validationError.path in newErrors) {
             newErrors[validationError.path as keyof typeof newErrors] =
-              validationError.message;
+              validationError.message ?? ''; // Add empty string fallback
           }
         });
-
         setErrors(newErrors);
+        setGeneralError("Please fix the errors above."); // Indicate validation errors exist
       } else {
-        console.error("Login error:", err);
-        setGeneralError("Login failed. Please check your credentials.");
+        // Handle RTK Query errors (from the API call) caught by .unwrap()
+        console.error("Login failed after mutation trigger:", err);
+        setGeneralError(getErrorMessage(err as FetchBaseQueryError | SerializedError)); // Use the helper for API errors
       }
-    } finally {
-      setLoading(false);
     }
   };
+
+  // Optional: Use useEffect only for logging or side effects *not* directly tied to button press
+  // For example, if you needed to show a toast message outside this component tree.
+  // In this setup, handling errors with .unwrap() and success via Redux state change is cleaner.
+  // Keeping a minimal useEffect to observe state changes if desired, but it's less crucial now.
+  useEffect(() => {
+    // This effect will run when isLoading, isError, error states change
+    // onQueryStarted already handled success and token storage.
+    // unwrap() in handleLogin already handled API errors for display.
+    // So, this effect is primarily for debugging or complex side effects.
+    console.log("Login state changed:", { isLoading, isError, error });
+
+    // No need to call setAuthToken here if _layout watches Redux state.
+    // No need to set general error here, handleLogin catch block does it.
+
+  }, [isLoading, isError, error]); // Dependencies on the mutation state
 
   return (
     <ScrollView
@@ -195,6 +265,7 @@ export default function Login() {
         </Link>
       </View>
 
+      {/* Display the general error if it exists */}
       {generalError ? (
         <Text
           style={[styles.errorText, { textAlign: "center", marginBottom: 10 }]}
@@ -204,7 +275,6 @@ export default function Login() {
       ) : null}
 
       <Pressable
-        onPress={handleRegister}
         style={({ pressed }) => [
           {
             transform: [{ scale: pressed ? 0.97 : 1 }],
@@ -212,12 +282,15 @@ export default function Login() {
           },
           styles.button,
         ]}
-        disabled={loading}
+        onPress={handleLogin} // Bind handleLogin to the Pressable's onPress
+        disabled={isLoading} // Disable button while RTK Query is loading
       >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
+        {isLoading ? (
+          <ActivityIndicator color="#fff" /> // Show loading indicator based on RTK Query state
         ) : (
-          <Text style={styles.buttonText}>Get started</Text>
+          <Text style={styles.buttonText}>
+            Login {/* Text is inside Pressable, no need for separate onPress */}
+          </Text>
         )}
       </Pressable>
 

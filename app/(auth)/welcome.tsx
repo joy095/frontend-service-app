@@ -6,7 +6,6 @@ import {
   Text,
   SafeAreaView,
   Image,
-  TouchableOpacity,
   ScrollView,
   Pressable,
 } from "react-native";
@@ -30,23 +29,6 @@ export default function welcome() {
               people
             </Text>
           </View>
-
-          <Pressable
-            onPress={() => {
-              router.push("/(auth)/test");
-            }}
-            style={({ pressed }) => [
-              {
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-                opacity: pressed ? 0.6 : 1,
-              },
-              styles.button,
-            ]}
-          >
-            <View>
-              <Text style={styles.buttonText}>Test</Text>
-            </View>
-          </Pressable>
 
           <Pressable
             onPress={() => {

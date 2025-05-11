@@ -11,8 +11,8 @@ import {
 import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Feather } from "@expo/vector-icons";
-import { register } from "../../utils/api";
-import { storeTokens } from "../../utils/auth";
+import { register } from "../../src/utils/api";
+import { storeTokens } from "../../src/utils/auth";
 import { ScrollView } from "react-native-gesture-handler";
 import * as Yup from "yup";
 
@@ -26,9 +26,9 @@ const schema = Yup.object().shape({
     })
     .required("Email is required"),
   password: Yup.string()
-    .matches(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/, {
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,20}$/, {
       message:
-        "Password must be at least 8 characters long and include a number.",
+        "Password must be between 8 and 20 characters long and include uppercase, lowercase, number, and special character (!@#$%^&*).",
     })
     .required("Password is required"),
 });
