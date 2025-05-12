@@ -24,12 +24,10 @@ import {
 import { BASE_URL } from "@/src/utils/constants";
 import { RootState } from "../store/store"; // Import RootState type
 
-
 // *** REMOVE hydrateAuthState ASYNC THUNK FROM HERE ***
 // *** It belongs in src/store/auth/authSlice.ts and should use your storage utility ***
 // import { createAsyncThunk } from "@reduxjs/toolkit";
 // export const hydrateAuthState = createAsyncThunk(...) // Delete this block
-
 
 // Create a new mutex to prevent multiple token refresh attempts at once
 const mutex = new Mutex();
@@ -75,14 +73,12 @@ const baseQueryWithReauth = async (
       args
     ); // Log 2
     // *** baseQuery expects 3 arguments: args, api, extraOptions ***
-    // Pass extraOptions as the 3rd argument for non-auth calls
-    return baseQuery(args, api, extraOptions);
+    return baseQuery(args, api, extraOptions); // Pass extraOptions as the 3rd argument
   }
 
   // For authenticated endpoints, wait until the mutex is available without locking it
   await mutex.waitForUnlock();
   console.log("baseQueryWithReauth: Mutex unlocked for:", args); // Log 3
-
 
   // Perform the original request
   // *** baseQuery expects 3 arguments: args, api, extraOptions ***
@@ -94,13 +90,18 @@ const baseQueryWithReauth = async (
     result
   ); // Log 4
 
-
   // Check if the request failed with a 401 error
-  const isUnauthorized =
-    result.error &&
-    (result.error.status === 401 ||
-      (result.error.status === "PARSING_ERROR" &&
-        (result.error as any)?.originalStatus === 401));
+  // *** FIX: Explicitly annotate isUnauthorized as boolean ***
+  const isUnauthorized: boolean = // Add the type annotation here
+    !!result.error && // Ensure result.error is truthy
+    !!(
+      // Ensure the condition inside is truthy
+      (
+        result.error.status === 401 ||
+        (result.error.status === "PARSING_ERROR" &&
+          (result.error as any)?.originalStatus === 401)
+      )
+    );
 
   console.log(
     "baseQueryWithReauth: Is Unauthorized?",
@@ -126,20 +127,16 @@ const baseQueryWithReauth = async (
       originalAccessToken ? "Present" : "Missing"
     ); // Log 8
 
-
     // *** FIX: Declare refreshToken with let OUTSIDE the try block ***
     let refreshToken: string | null = null;
-
 
     try {
       const state = api.getState() as RootState; // Get the current state
       // *** Assign to the variable declared outside ***
       refreshToken = state.auth.refreshToken; // Use assignment here
 
-
       const stateAfterMutex = api.getState() as RootState;
       const accessTokenAfterMutex = stateAfterMutex.auth.accessToken;
-
 
       console.log(
         "baseQueryWithReauth: Refresh Token in state:",
@@ -149,7 +146,6 @@ const baseQueryWithReauth = async (
         "baseQueryWithReauth: Access Token in state (after mutex acquire):",
         accessTokenAfterMutex ? "Present" : "Missing"
       ); // Log 10
-
 
       // *** FIX: Check if the access token is present AND different from the original failed one ***
       if (
@@ -167,7 +163,6 @@ const baseQueryWithReauth = async (
           "baseQueryWithReauth: Result of retried original query (Path 1):",
           result
         ); // Log 12
-
       } else if (!refreshToken) {
         // *** FIX: refreshToken is now accessible here ***
         // Path 2: No refresh token available
@@ -180,7 +175,6 @@ const baseQueryWithReauth = async (
         console.log(
           "baseQueryWithReauth: Returning original error and logging out (Path 2)."
         ); // Log 14
-
       } else {
         // Path 3: *** Proceed with refresh ***
         console.log(
@@ -195,11 +189,11 @@ const baseQueryWithReauth = async (
           typeof refreshToken
         ); // Log 16 (was Log 20)
 
-
         // Make the refresh token request
         // *** Pass an explicit empty object for the third argument to baseQuery for THIS call ***
         const refreshResult = await baseQuery(
-          { // Arg 1
+          {
+            // Arg 1
             url: "/refresh-token",
             method: "POST",
             body: {}, // Using empty object body
@@ -221,76 +215,105 @@ const baseQueryWithReauth = async (
           refreshResult
         ); // Log 17
 
-
         // --- Handle Refresh Response (Path 3) ---
-        // ... (Your existing refresh handling logic using refreshResult.data) ...
-        const refreshTokensData = refreshResult.data as
-          | { tokens?: LoginApiResponseTokens }
-          | TokensPayload
+        // *** UPDATE: Expect top-level access_token, refresh_token, and user OR top-level accessToken, refreshToken ***
+        const refreshResponseData = refreshResult.data as
+          | { access_token?: string; refresh_token?: string; user?: User } // Handles top-level snake_case + user (less ideal, but based on previous backend attempt)
+          | TokensPayload // *** Handles your current backend response: top-level camelCase ***
           | undefined;
 
         let newAccessToken: string | null = null;
         let newRefreshToken: string | null = null;
+        let newUserData: User | null = null; // Capture user data if present (from the less ideal backend structure)
 
         if (
-          refreshTokensData &&
-          "tokens" in refreshTokensData &&
-          refreshTokensData.tokens
+          refreshResponseData &&
+          refreshResult.meta?.response?.status === 200
         ) {
-          newAccessToken = refreshTokensData.tokens.access_token;
-          newRefreshToken = refreshTokensData.tokens.refresh_token;
-        } else if (refreshTokensData && "accessToken" in refreshTokensData) {
-          newAccessToken = (refreshTokensData as TokensPayload).accessToken;
-          newRefreshToken = (refreshTokensData as TokensPayload).refreshToken;
+          // Check for data and status first
+
+          // *** Try extracting from top-level camelCase first (your current ideal backend response) ***
+          if (
+            "accessToken" in refreshResponseData &&
+            "refreshToken" in refreshResponseData
+          ) {
+            newAccessToken = (refreshResponseData as TokensPayload).accessToken;
+            newRefreshToken = (refreshResponseData as TokensPayload)
+              .refreshToken;
+            // User data is not expected in the ideal refresh response, so newUserData remains null
+            console.log(
+              "baseQueryWithReauth: Extracted tokens from top-level camelCase (ideal refresh response)."
+            ); // Log added
+          } else if (
+            "access_token" in refreshResponseData &&
+            "refresh_token" in refreshResponseData
+          ) {
+            // Fallback to extracting from top-level snake_case (if backend returns this way, less ideal)
+            newAccessToken = (refreshResponseData as any).access_token ?? null; // Use any temporarily or update types if needed
+            newRefreshToken =
+              (refreshResponseData as any).refresh_token ?? null;
+            newUserData = (refreshResponseData as any).user ?? null; // Capture user data if present
+            console.log(
+              "baseQueryWithReauth: Extracted tokens from top-level snake_case (+ user)."
+            ); // Log added
+          }
+
+          // Check if tokens were successfully extracted from either format
+          if (newAccessToken && newRefreshToken) {
+            console.log(
+              "baseQueryWithReauth: Refresh successful, new tokens extracted."
+            ); // Log 18a
+
+            // Get existing user data from state to preserve it
+            const currentStateAfterRefresh = api.getState() as RootState;
+            const currentUserDataAtRefresh = currentStateAfterRefresh.auth.user; // User | null
+
+            api.dispatch(
+              setAuthData({
+                tokens: {
+                  accessToken: newAccessToken,
+                  refreshToken: newRefreshToken,
+                },
+                // Use new user data if provided by refresh (from the less ideal structure), otherwise keep existing
+                user: newUserData ?? currentUserDataAtRefresh, // Use ?? to prefer newUserData if it exists
+                isAuthenticated: true,
+              })
+            );
+            console.log(
+              "baseQueryWithReauth: Dispatching setAuthData after refresh success."
+            ); // Log 18b
+
+            // Retry the original query
+            console.log(
+              "baseQueryWithReauth: Retrying original request:",
+              args
+            ); // Log 19
+            result = await baseQuery(args, api, extraOptions); // Retry original query (will use new token from state)
+            console.log(
+              "baseQueryWithReauth: Result of retried original query (Path 3):",
+              result
+            ); // Log 20
+          } else {
+            // Refresh failed: Status 200 but tokens missing from response body in expected formats
+            console.error(
+              "baseQueryWithReauth: Refresh failed: Status 200 but tokens missing from response body in expected formats.",
+              refreshResult.data
+            ); // Log 21a
+            api.dispatch(logout()); // Log out if tokens weren't in the response
+            result = refreshResult; // Return the refresh error
+          }
+        } else {
+          // Refresh failed: Status not 200 or no data received (e.g., network error, server error < 200, parsing error)
+          console.error(
+            "baseQueryWithReauth: Refresh failed: Status not 200 or no data.",
+            refreshResult?.meta?.response?.status,
+            refreshResult.data,
+            refreshResult.error
+          ); // Log 21b
+          api.dispatch(logout()); // Log out if refresh failed
+          result = refreshResult; // Return the error result
         }
         // --- End Handle Refresh Response (Path 3) ---
-
-
-        if (
-          refreshResult.meta?.response?.status === 200 && // Check HTTP status
-          newAccessToken && // Check if access token was successfully extracted
-          newRefreshToken // Check if refresh token was successfully extracted
-        ) {
-          console.log(
-            "baseQueryWithReauth: Refresh successful, dispatching setAuthData and retrying original request (Path 3)."
-          ); // Log 18
-
-          // Get existing user data from state to preserve it if needed by setAuthData
-          const currentStateAfterRefresh = api.getState() as RootState;
-          const currentUserDataAtRefresh = currentStateAfterRefresh.auth.user; // User | null
-
-          api.dispatch(
-            setAuthData({
-              tokens: {
-                accessToken: newAccessToken,
-                refreshToken: newRefreshToken,
-              },
-              user: currentUserDataAtRefresh, // This is type-safe if AuthDataPayload is updated
-              isAuthenticated: true,
-            })
-          );
-
-          // Retry the original query
-          console.log("baseQueryWithReauth: Retrying original request:", args); // Log 19
-          // *** baseQuery expects 3 arguments: args, api, extraOptions ***
-          result = await baseQuery(args, api, extraOptions); // Pass original extraOptions here for the retry
-          console.log(
-            "baseQueryWithReauth: Result of retried original query (Path 3):",
-            result
-          ); // Log 20
-
-
-        } else {
-          // Refresh failed (status not 200 or tokens missing from response)
-          console.error(
-            "baseQueryWithReauth: Refresh failed or invalid response. Logging out (Path 3).",
-            refreshResult
-          ); // Log 21
-          api.dispatch(logout()); // Log out if refresh failed or tokens weren't in response
-          result = refreshResult; // Return the refresh error
-        }
-        // --- End Path 3 Logic ---
-
       } // End else block for Path 3
     } finally {
       release(); // Always release the mutex
@@ -322,20 +345,22 @@ export const apiSlice = createApi({
       }),
       // Use onQueryStarted to handle the side effect (dispatching setAuthData on success)
       async onQueryStarted(credentials, { dispatch, queryFulfilled }) {
+        // ... inside login mutation's async onQueryStarted(credentials, { dispatch, queryFulfilled }) { ...
         try {
-          const { data } = await queryFulfilled; // Await the successful query result
+          const { data } = await queryFulfilled;
           console.log("Login successful, received data structure:", data);
 
           // --- CORRECTLY EXTRACT TOKENS BASED ON API RESPONSE STRUCTURE ---
-          // Assuming login response has tokens nested and snake_case (LoginResponse & LoginApiResponseTokens types)
-          const accessToken = data.tokens.access_token;
-          const refreshToken = data.tokens.refresh_token;
+          // Assuming login response has tokens nested and camelCase (based on your logs)
+          const accessToken = data.tokens.accessToken; // *** FIX: Change from access_token to accessToken ***
+          const refreshToken = data.tokens.refreshToken; // *** FIX: Change from refresh_token to refreshToken ***
 
-          // Assuming login response also includes the user data at the top level (LoginResponse type)
-          const userData = data.user;
+          // Assuming login response also includes the user data at the top level
+          const userData = data.user; // This seems correct based on logs
           // --- End Extraction ---
 
           if (accessToken && refreshToken && userData) {
+            // This should now be true if tokens are extracted
             console.log(
               "Extracted tokens and user data after login, dispatching setAuthData."
             );
@@ -351,16 +376,14 @@ export const apiSlice = createApi({
               })
             );
             // The listener middleware will handle saving tokens and user data to storage
-
           } else {
             console.error(
               "Login successful but token data or user data was missing or unexpected in response."
             );
-            // If tokens/user data are mandatory for authentication, dispatch logout
             dispatch(logout()); // Log out if essential data is missing
           }
         } catch (error) {
-          console.error("Login failed in onQueryStarted:", error);
+          console.error("Login failed in onQueryStarted:", error); // *** Log 4 ***
           // Errors like invalid credentials will typically be handled by the component
           // consuming the useLoginMutation hook (via the error property).
           // Optionally dispatch global notification actions here if needed.
@@ -376,10 +399,8 @@ export const apiSlice = createApi({
   }),
 });
 
-
 // Export typed hooks for use in components
 export const { useGetUserQuery, useLoginMutation } = apiSlice;
-
 
 // --- Cache Clearing on Logout ---
 // This part goes in your listener middleware setup (e.g., src/store/auth/authListeners.ts)

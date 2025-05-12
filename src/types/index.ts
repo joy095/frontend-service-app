@@ -35,8 +35,8 @@ export interface BaseQueryExtraOptions {
 
 // Define the structure of the tokens object *inside* the login response
 export interface LoginApiResponseTokens {
-    access_token: string; // Note the snake_case keys from your API
-    refresh_token: string;
+    accessToken: string; // Note the snake_case keys from your API
+    refreshToken: string;
     // Add other token-related fields if present in your API response
 }
 
