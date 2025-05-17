@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
   placeholderText: {
     position: "absolute",
     left: 15,
-    top: 18,
+    top: 16,
     fontSize: 16,
     color: "#999",
     backgroundColor: "transparent",

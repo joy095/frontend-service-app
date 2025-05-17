@@ -200,7 +200,7 @@ export default function Register() {
       <FormField
         value={formState.firstName}
         onChangeText={(text) => updateFormState("firstName", text)}
-        placeholder="Jason"
+        placeholder="First Name"
         error={errors.firstName}
         autoCapitalize="none"
       />
@@ -208,7 +208,7 @@ export default function Register() {
       <FormField
         value={formState.lastName}
         onChangeText={(text) => updateFormState("lastName", text)}
-        placeholder="Paul"
+        placeholder="Last Name"
         error={errors.lastName}
         autoCapitalize="none"
       />
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   placeholderText: {
     position: "absolute",
     left: 15,
-    top: 18,
+    top: 16,
     fontSize: 16,
     color: "#999",
     backgroundColor: "transparent",

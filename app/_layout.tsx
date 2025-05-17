@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { Provider, useSelector, useDispatch } from "react-redux"; // Import useDispatch
 import { store, RootState, AppDispatch } from "../src/store/store"; // Import store, RootState, AppDispatch
-import { hydrateAuthState } from '../src/store/auth/authSlice'; // Import the async thunk
+import { hydrateAuthState } from "../src/store/auth/authSlice"; // Import the async thunk
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 // Inner component handling navigation logic (wrapped by Provider)
 function RootLayoutNav() {
@@ -13,9 +15,13 @@ function RootLayoutNav() {
   const dispatch = useDispatch<AppDispatch>(); // Get the dispatch function
 
   // --- Use Redux State for Authentication and Hydration ---
-  const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
+  const isAuthenticated = useSelector(
+    (state: RootState) => state.auth.isAuthenticated
+  );
   // Select the isHydrated flag from your slice
-  const isHydrated = useSelector((state: RootState) => state.auth.isHydrated || false);
+  const isHydrated = useSelector(
+    (state: RootState) => state.auth.isHydrated || false
+  );
 
   // Effect to dispatch hydration thunk on mount
   useEffect(() => {
@@ -27,7 +33,11 @@ function RootLayoutNav() {
 
   // Effect to handle redirects based on Redux auth state and current route
   useEffect(() => {
-    console.log(`[Navigation Effect] isHydrated: ${isHydrated}, isAuthenticated: ${isAuthenticated}, segments: ${segments.join('/')}`);
+    console.log(
+      `[Navigation Effect] isHydrated: ${isHydrated}, isAuthenticated: ${isAuthenticated}, segments: ${segments.join(
+        "/"
+      )}`
+    );
 
     // --- Wait for Hydration to Complete ---
     // The hydration thunk must finish and set isHydrated = true for this to proceed
@@ -48,7 +58,9 @@ function RootLayoutNav() {
       router.replace("/(screens)/profile"); // Redirect to your main app entry point
     } else if (!isAuthenticated && !inAuthGroup) {
       // User is NOT logged in (per Redux) AND is NOT in the auth group, redirect to auth
-      console.log("Redux state: Not logged in, redirecting from app to auth...");
+      console.log(
+        "Redux state: Not logged in, redirecting from app to auth..."
+      );
       router.replace("/(auth)/login"); // Redirect to your main auth entry point
     } else {
       console.log("Redux state and route group match. No redirect needed.");
@@ -79,7 +91,8 @@ function RootLayoutNav() {
     >
       {/* Define your route groups here */}
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(app)" options={{ headerShown: false }} /> {/* Assuming your app screens are in a group like this */}
+      <Stack.Screen name="(app)" options={{ headerShown: false }} />{" "}
+      {/* Assuming your app screens are in a group like this */}
       {/* Add any other global routes */}
     </Stack>
   );
@@ -89,9 +102,13 @@ function RootLayoutNav() {
 export default function RootLayout() {
   // Keep the Provider here wrapping everything
   return (
-    <Provider store={store}>
-      {/* Render the navigation logic component */}
-      <RootLayoutNav />
-    </Provider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Provider store={store}>
+        <SafeAreaProvider>
+          {/* Render the navigation logic component */}
+          <RootLayoutNav />
+        </SafeAreaProvider>
+      </Provider>
+    </GestureHandlerRootView>
   );
 }

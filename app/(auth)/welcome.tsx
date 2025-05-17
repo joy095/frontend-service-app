@@ -4,7 +4,6 @@ import {
   StyleSheet,
   View,
   Text,
-  SafeAreaView,
   Image,
   ScrollView,
   Pressable,
@@ -12,7 +11,7 @@ import {
 
 export default function welcome() {
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <ScrollView keyboardShouldPersistTaps="handled">
         <View style={styles.hero}>
           <Image
@@ -65,7 +64,7 @@ export default function welcome() {
           </Pressable>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
