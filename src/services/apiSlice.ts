@@ -18,6 +18,10 @@ import {
   TokensPayload,
   LoginApiResponseTokens,
   AuthDataPayload,
+  CheckUsernameAvailabilityResponse,
+  CheckUsernameAvailabilityRequest,
+  RegisterResponse,
+  RegisterRequest,
 } from "../types";
 import { BASE_URL } from "@/src/utils/constants";
 import type { RootState } from "../store/store";
@@ -322,6 +326,22 @@ export const apiSlice = createApi({
       },
     }),
 
+    checkUsernameAvailability: builder.query<CheckUsernameAvailabilityResponse, CheckUsernameAvailabilityRequest>({
+      query: (body) => ({
+        url: "/username-availability",
+        method: "POST",
+        body: body,
+      }),
+    }),
+
+    register: builder.mutation<RegisterResponse, RegisterRequest>({
+      query: (body) => ({
+        url: "/register",
+        method: "POST",
+        body: body,
+      }),
+    }),
+
     login: builder.mutation<LoginResponse, LoginCredentials>({
       query: (credentials) => ({
         url: "/login",
@@ -363,9 +383,10 @@ export const apiSlice = createApi({
         }
       },
     }),
+
+
   }),
 });
 
 // Export typed hooks for use in components
-export const { useGetUserQuery, useLoginMutation, useLogoutMutation } =
-  apiSlice;
+export const { useGetUserQuery, useLoginMutation, useLogoutMutation, useCheckUsernameAvailabilityQuery, useRegisterMutation } = apiSlice;

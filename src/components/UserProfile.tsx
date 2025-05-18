@@ -69,31 +69,15 @@ export default function UserProfile({ username }: UserProfileProps) {
     );
   }
 
-  // Logic to get the Birth Year
-  let birthYear = 'N/A';
-  if (user.age && typeof user.age === 'string' && user.age.length >= 4) {
-    try {
-      const dateObj = new Date(user.age);
-      if (!isNaN(dateObj.getTime())) {
-        birthYear = dateObj.getFullYear().toString();
-      } else {
-        console.warn("UserProfile: Failed to parse age string into a valid date:", user.age);
-      }
-    } catch (e) {
-      console.error("UserProfile: Error during age date parsing:", user.age, e);
-    }
-  } else {
-    console.warn("UserProfile: user.age is missing, not a string, or too short:", user.age);
-  }
+
 
   console.log("UserProfile: Data available and nested user object found. Rendering profile.");
   console.log(" Nested user object:", user);
   console.log(" user.username:", user.username);
   console.log(" user.email:", user.email);
-  console.log(" user.first_name:", user.first_name);
-  console.log(" user.last_name:", user.last_name);
-  console.log(" user.age:", user.age);
-  console.log(" Birth Year:", birthYear);
+  console.log(" user.first_name:", user.firstName);
+  console.log(" user.last_name:", user.lastName);
+
 
   // Handle logout button press
   const handleLogout = async () => {
@@ -132,9 +116,8 @@ export default function UserProfile({ username }: UserProfileProps) {
       <Text style={{ fontSize: 24, marginBottom: 20 }}>User Profile</Text>
       <Text style={{ fontSize: 16, marginBottom: 5 }}>Username: {user.username}</Text>
       <Text style={{ fontSize: 16, marginBottom: 5 }}>Email: {user.email}</Text>
-      <Text style={{ fontSize: 16, marginBottom: 5 }}>First Name: {user.first_name}</Text>
-      <Text style={{ fontSize: 16, marginBottom: 5 }}>Last Name: {user.last_name}</Text>
-      <Text style={{ fontSize: 16, marginBottom: 5 }}>Birth Year: {birthYear}</Text>
+      <Text style={{ fontSize: 16, marginBottom: 5 }}>First Name: {user.firstName}</Text>
+      <Text style={{ fontSize: 16, marginBottom: 5 }}>Last Name: {user.lastName}</Text>
 
       <View style={{ marginTop: 20 }}>
         <Button

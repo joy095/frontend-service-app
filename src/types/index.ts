@@ -15,9 +15,8 @@ export interface User {
     email: string;
     id: string;
     username: string;
-    first_name: string;
-    last_name: string;
-    age: string;
+    firstName: string;
+    lastName: string;
     // Add other properties here that match your API's nested user object
 }
 
@@ -69,3 +68,28 @@ export interface AuthState {
     user: User | null, // User can be null in state
     isHydrated: boolean, // Initial state
 };
+
+
+export interface CheckUsernameAvailabilityResponse {
+    available: boolean;
+    message?: string; // Optional message for why it's not available (e.g., "Username taken", "Contains bad words")
+}
+
+export interface CheckUsernameAvailabilityRequest {
+    username: string;
+}
+
+
+export interface RegisterResponse {
+    tokens: LoginApiResponseTokens;
+    user: User;
+}
+
+
+export interface RegisterRequest {
+    email: string;
+    username: string;
+    firstName: string;
+    lastName: string;
+    password: string
+}

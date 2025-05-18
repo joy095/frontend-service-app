@@ -49,7 +49,7 @@ function RootLayoutNav() {
     } else if (!isAuthenticated && !inAuthGroup) {
       // User is NOT logged in (per Redux) AND is NOT in the auth group, redirect to auth
       console.log("Redux state: Not logged in, redirecting from app to auth...");
-      router.replace("/(auth)/login"); // Redirect to your main auth entry point
+      router.replace("/"); // Redirect to your main auth entry point
     } else {
       console.log("Redux state and route group match. No redirect needed.");
     }
