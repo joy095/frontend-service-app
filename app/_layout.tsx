@@ -5,6 +5,7 @@ import { ActivityIndicator, Text, View } from "react-native";
 import { Provider, useSelector, useDispatch } from "react-redux"; // Import useDispatch
 import { store, RootState, AppDispatch } from "../src/store/store"; // Import store, RootState, AppDispatch
 import { hydrateAuthState } from '../src/store/auth/authSlice'; // Import the async thunk
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 // Inner component handling navigation logic (wrapped by Provider)
 function RootLayoutNav() {
@@ -49,7 +50,7 @@ function RootLayoutNav() {
     } else if (!isAuthenticated && !inAuthGroup) {
       // User is NOT logged in (per Redux) AND is NOT in the auth group, redirect to auth
       console.log("Redux state: Not logged in, redirecting from app to auth...");
-      router.replace("/(auth)/login"); // Redirect to your main auth entry point
+      router.replace("/"); // Redirect to your main auth entry point
     } else {
       console.log("Redux state and route group match. No redirect needed.");
     }
@@ -89,9 +90,11 @@ function RootLayoutNav() {
 export default function RootLayout() {
   // Keep the Provider here wrapping everything
   return (
-    <Provider store={store}>
-      {/* Render the navigation logic component */}
-      <RootLayoutNav />
-    </Provider>
+    <GestureHandlerRootView style={{ flex: 1 }}> {/* Add this wrapper */}
+      <Provider store={store}>
+        {/* Render the navigation logic component */}
+        <RootLayoutNav />
+      </Provider>
+    </GestureHandlerRootView>
   );
 }

@@ -8,7 +8,7 @@ import {
   FetchBaseQueryMeta,
 } from "@reduxjs/toolkit/query/react";
 import { Mutex } from "async-mutex";
-import { logout, setAuthData } from "../store/auth/authSlice";
+import { logout, setAuthData, setRegisteredUser } from "../store/auth/authSlice";
 import {
   User,
   GetUserResponse,
@@ -18,6 +18,11 @@ import {
   TokensPayload,
   LoginApiResponseTokens,
   AuthDataPayload,
+  CheckUsernameAvailabilityResponse,
+  CheckUsernameAvailabilityRequest,
+  RegisterResponse,
+  RegisterRequest,
+  RegisteredUser,
 } from "../types";
 import { BASE_URL } from "@/src/utils/constants";
 import type { RootState } from "../store/store";
@@ -322,6 +327,49 @@ export const apiSlice = createApi({
       },
     }),
 
+    checkUsernameAvailability: builder.query<CheckUsernameAvailabilityResponse, CheckUsernameAvailabilityRequest>({
+      query: (body) => ({
+        url: "/username-availability",
+        method: "POST",
+        body: body,
+      }),
+    }),
+
+    register: builder.mutation<RegisterResponse, RegisterRequest>({
+      query: (body) => ({
+        url: "/register",
+        method: "POST",
+        body: body,
+      }),
+      async onQueryStarted(credentials, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled; // data is of type RegisterResponse
+          console.log("Registration successful, received user data structure:", data);
+
+          // Based on your RegisterResponse type, the data itself is the RegisteredUser
+          const registeredUserData: RegisteredUser = data;
+
+          if (registeredUserData && registeredUserData.id) { // Check if data is present and has an ID
+            console.log(
+              "Extracted registered user data. User is registered but not yet authenticated/verified."
+            );
+            // Dispatch the action to set the registered user state
+            dispatch(setRegisteredUser({ user: registeredUserData, isRegistered: true })); // Pass the RegisteredUser object with isRegistered flag
+
+          } else {
+            console.error(
+              "Registration successful but user data was missing or unexpected in response."
+            );
+            // Handle the case where registration succeeded but the expected user data wasn't returned
+          }
+        } catch (error) {
+          console.error("Registration failed in onQueryStarted:", error);
+          // Handle registration failure (e.g., show error message)
+          // You might want to dispatch an action here to indicate registration failed
+        }
+      },
+    }),
+
     login: builder.mutation<LoginResponse, LoginCredentials>({
       query: (credentials) => ({
         url: "/login",
@@ -367,5 +415,10 @@ export const apiSlice = createApi({
 });
 
 // Export typed hooks for use in components
-export const { useGetUserQuery, useLoginMutation, useLogoutMutation } =
-  apiSlice;
+export const {
+  useGetUserQuery,
+  useLoginMutation,
+  useLogoutMutation,
+  useCheckUsernameAvailabilityQuery,
+  useRegisterMutation,
+} = apiSlice;

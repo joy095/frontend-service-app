@@ -251,12 +251,14 @@ const handleLogout = () => {
 export const register = async (
   username: string,
   password: string,
-  email: string
+  email: string,
+  firstName: string,
+  lastName: string
 ) => {
   const res = await fetch(`${BASE_URL}/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password, email }),
+    body: JSON.stringify({ username, password, email, firstName, lastName }),
   });
 
   if (!res.ok) {

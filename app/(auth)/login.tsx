@@ -12,18 +12,8 @@ import {
 import { Link, useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Feather } from "@expo/vector-icons";
-
-// Import the useLoginMutation hook from your RTK Query API slice
-import { useLoginMutation } from "../../src/services/apiSlice"; // <--- Adjust the import path as needed (e.g., ../api/user or ../services/apiSlice)
-
-// We will rely on onQueryStarted in the API slice dispatching setTokens to Redux.
-// Your _layout.tsx should watch the Redux state (isAuthenticated).
-// We don't need to import setAuthToken here if it's only used by _layout and duplicates Redux state.
-// If setAuthToken does something ELSE crucial for _layout outside of Redux, you might keep it,
-// but watching Redux state directly is the standard pattern.
-// import { setAuthToken } from "../_layout"; // <-- Likely remove this import
-
 import { ScrollView } from "react-native-gesture-handler";
+import { useLoginMutation } from "../../src/services/apiSlice";
 import * as Yup from "yup";
 import { LoginCredentials } from "../../src/types"; // Import the type for credentials
 import { FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
@@ -56,6 +46,7 @@ const FormField = ({
   const [isFocused, setIsFocused] = useState(false);
 
   return (
+
     <View style={styles.inputContainer}>
       <TextInput
         value={value}
@@ -306,8 +297,13 @@ export default function Login() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    marginLeft: "auto",
+    marginRight: "auto",
     padding: 20,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingTop: 60,
+    maxWidth: 600,
+    width: "100%",
   },
   backButton: {
     marginBottom: 20,
@@ -338,12 +334,12 @@ const styles = StyleSheet.create({
   placeholderText: {
     position: "absolute",
     left: 15,
-    top: 18,
+    top: 16,
     fontSize: 16,
     color: "#999",
     backgroundColor: "transparent",
     paddingHorizontal: 4,
-    zIndex: 1,
+    zIndex: -1,
   },
   placeholderTextSmall: {
     top: 8,

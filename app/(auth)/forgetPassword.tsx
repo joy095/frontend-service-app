@@ -193,7 +193,7 @@ export default function forgetPassword() {
       );
 
       await storeTokens(accessToken, refreshToken);
-      router.replace("/(tabs)");
+      router.replace("/(auth)/register");
     } catch (err) {
       // Handle Yup validation errors
       if (err instanceof Yup.ValidationError) {
