@@ -5,6 +5,7 @@ import { ActivityIndicator, Text, View } from "react-native";
 import { Provider, useSelector, useDispatch } from "react-redux"; // Import useDispatch
 import { store, RootState, AppDispatch } from "../src/store/store"; // Import store, RootState, AppDispatch
 import { hydrateAuthState } from '../src/store/auth/authSlice'; // Import the async thunk
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 // Inner component handling navigation logic (wrapped by Provider)
 function RootLayoutNav() {
@@ -89,9 +90,11 @@ function RootLayoutNav() {
 export default function RootLayout() {
   // Keep the Provider here wrapping everything
   return (
-    <Provider store={store}>
-      {/* Render the navigation logic component */}
-      <RootLayoutNav />
-    </Provider>
+    <GestureHandlerRootView style={{ flex: 1 }}> {/* Add this wrapper */}
+      <Provider store={store}>
+        {/* Render the navigation logic component */}
+        <RootLayoutNav />
+      </Provider>
+    </GestureHandlerRootView>
   );
 }

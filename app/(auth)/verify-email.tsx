@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Animated,
   Pressable,
-  Platform,
 } from "react-native";
 import { Link, useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -19,18 +18,9 @@ import * as Yup from "yup";
 // Yup validation schema
 const schema = Yup.object().shape({
   username: Yup.string().required("Username is required"),
-  email: Yup.string()
-    .email()
-    .matches(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, {
-      message: "Please enter a valid email address",
-    })
-    .required("Email is required"),
-  password: Yup.string()
-    .matches(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/, {
-      message:
-        "Password must be at least 8 characters long and include a number.",
-    })
-    .required("Password is required"),
+  otp: Yup.string()
+    .length(6, "OTP must be exactly 6 digits")
+    .required("OTP is required"),
 });
 
 const Button = ({
@@ -145,20 +135,15 @@ const FormField = ({
   );
 };
 
-export default function verifyOtp() {
+export default function VerifyEmail() {
   const router = useRouter();
 
   const [formState, setFormState] = useState({
-    username: "",
-    email: "",
-    password: "",
-    secureTextEntry: true,
+    otp: ""
   });
 
   const [errors, setErrors] = useState({
-    username: "",
-    email: "",
-    password: "",
+    otp: ""
   });
 
   type FormField = keyof typeof errors;
@@ -175,29 +160,25 @@ export default function verifyOtp() {
       // Validate fields
       await schema.validate(
         {
-          username: formState.username,
-          email: formState.email,
-          password: formState.password,
+          otp: formState.otp,
         },
         { abortEarly: false }
       );
 
       // Clear errors
-      setErrors({ username: "", email: "", password: "" });
+      setErrors({ otp: "" });
 
       // Proceed with API call
       const { accessToken, refreshToken } = await register(
-        formState.username,
-        formState.email,
-        formState.password
+        formState.otp
       );
 
       await storeTokens(accessToken, refreshToken);
-      router.replace("/(tabs)");
+      router.replace("/(screens)/profile");
     } catch (err) {
       // Handle Yup validation errors
       if (err instanceof Yup.ValidationError) {
-        const newErrors = { username: "", email: "", password: "" };
+        const newErrors = { otp: "" };
 
         err.inner.forEach((validationError: Yup.ValidationError) => {
           if (validationError.path && validationError.path in newErrors) {
@@ -233,16 +214,16 @@ export default function verifyOtp() {
       </View>
 
       <FormField
-        value={formState.email}
-        onChangeText={(text) => updateFormState("email", text)}
-        placeholder="Enter your email"
-        error={errors.email}
+        value={formState.otp}
+        onChangeText={(text) => updateFormState("otp", text)}
+        placeholder="Enter your OTP"
+        error={errors.otp}
         autoCapitalize="none"
       />
 
       <View style={styles.buttonWrapper}>
         <Button
-          text="Reset Password"
+          text="Verify Email"
           onPress={handleRegister}
           errors={errors}
         />
@@ -260,8 +241,13 @@ export default function verifyOtp() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    marginLeft: "auto",
+    marginRight: "auto",
     padding: 20,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingTop: 60,
+    maxWidth: 600,
+    width: "100%",
   },
   backButton: {
     marginBottom: 20,
@@ -291,12 +277,12 @@ const styles = StyleSheet.create({
   placeholderText: {
     position: "absolute",
     left: 15,
-    top: 18,
+    top: 16,
     fontSize: 16,
     color: "#999",
     backgroundColor: "transparent", // Changed from white to transparent
     paddingHorizontal: 4,
-    zIndex: 1, // Changed from -1 to 1
+    zIndex: -1,
   },
   placeholderTextSmall: {
     top: 8,

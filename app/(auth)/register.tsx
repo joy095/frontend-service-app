@@ -305,7 +305,7 @@ export default function Register() {
       console.log("Registration successful, navigating to OTP screen.");
       // The setAuthData dispatch happens in the apiSlice's onQueryStarted for the register mutation.
       // So here, we just navigate.
-      router.replace("/(auth)/verifyOtp"); // Adjust route as needed
+      router.replace("/(auth)/verify-email"); // Adjust route as needed
     }
   }, [isRegisterSuccess, registerData, router]); // Dependencies for the effect
 
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: 20,
     backgroundColor: "#fff",
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingTop: 60,
     alignItems: "center",
     maxWidth: 600,
     width: "100%",
@@ -604,16 +604,16 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 60 : 20,
+    top: 60,
     left: 20,
     zIndex: 1,
     padding: 5,
   },
   logo: {
-    width: 180,
-    height: 70,
+    width: 200,
+    height: 80,
     marginBottom: 30,
-    resizeMode: "contain",
+    alignSelf: "center",
   },
   inputContainer: {
     position: "relative",
@@ -640,11 +640,11 @@ const styles = StyleSheet.create({
   placeholderText: {
     position: "absolute",
     left: 15,
-    top: 18,
+    top: 16,
     fontSize: 16,
     color: "#999",
     paddingHorizontal: 4,
-    zIndex: 1,
+    zIndex: -1,
     pointerEvents: "none",
   },
   placeholderTextSmall: {
@@ -678,13 +678,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     width: "100%",
   },
-  // Removed the separate availabilityMessage style
-  // availabilityMessage: {
-  //     fontSize: 12,
-  //     marginTop: 6,
-  //     marginLeft: 15,
-  //     color: 'green',
-  // },
   eyeIcon: {
     position: "absolute",
     right: 15,

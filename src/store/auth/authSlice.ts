@@ -1,7 +1,7 @@
 // src/store/authSlice.ts
 import { createSlice, PayloadAction, createAsyncThunk } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AuthState, User, AuthDataPayload } from "../../types"; // Import types
+import { AuthState, User, AuthDataPayload, RegisterResponse } from "../../types"; // Import types
 
 // Async Thunk to load state from storage
 export const hydrateAuthState = createAsyncThunk(
@@ -22,6 +22,7 @@ export const hydrateAuthState = createAsyncThunk(
               refreshToken: storedRefreshToken,
             },
             user: storedUser,
+            isAuthenticated: true,
           })
         );
         console.log("Auth state hydrated from storage.");
@@ -38,12 +39,21 @@ export const hydrateAuthState = createAsyncThunk(
   }
 );
 
+
+interface SetRegisteredUserPayload {
+  user: RegisterResponse; // Use the type that matches your registration response
+  isRegistered: true; // Add a flag to indicate registration
+  // No tokens or isAuthenticated here yet
+}
+
 const initialState: AuthState = {
   accessToken: null,
   refreshToken: null,
   user: null,
   isAuthenticated: false,
   isHydrated: false,
+  registeredUser: null, // Initialize new state properties
+  isRegistered: false, // Initialize new state properties
 };
 
 const authSlice = createSlice({
@@ -71,6 +81,29 @@ const authSlice = createSlice({
         (err) => console.error("Failed to save user:", err)
       );
     },
+
+    setRegisteredUser: (state, action: PayloadAction<SetRegisteredUserPayload>) => {
+      // *** FIX: Assign to registeredUser state property ***
+      state.registeredUser = action.payload.user;
+      // *** FIX: Set the isRegistered flag which now exists in AuthState ***
+      state.isRegistered = true;
+
+      // Crucially, isAuthenticated remains false
+      state.isAuthenticated = false;
+      // Clear any previous authenticated state
+      state.accessToken = null;
+      state.refreshToken = null;
+      state.user = null;
+
+      // Optional: Persist the registered user state if needed across app restarts before verification
+      // AsyncStorage.setItem("registeredUser", JSON.stringify(action.payload.user)).catch(
+      //     (err) => console.error("Failed to save registered user:", err)
+      // );
+      // AsyncStorage.removeItem("accessToken").catch((err) => console.error("Failed to remove access token from storage:", err));
+      // AsyncStorage.removeItem("refreshToken").catch((err) => console.error("Failed to remove refresh token from storage:", err));
+      // AsyncStorage.removeItem("user").catch((err) => console.error("Failed to remove authenticated user from storage:", err));
+    },
+
     logout: (state) => {
       state.accessToken = null;
       state.refreshToken = null;
@@ -99,6 +132,6 @@ const authSlice = createSlice({
 
 
 
-export const { setAuthData, logout, setHydrated } = authSlice.actions; // Export the new action
+export const { setAuthData, logout, setHydrated, setRegisteredUser } = authSlice.actions; // Export the new action
 
 export default authSlice.reducer;
