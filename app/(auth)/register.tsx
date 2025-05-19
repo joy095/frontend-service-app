@@ -136,11 +136,15 @@ const schema = Yup.object().shape({
     })
     .required("Email is required"),
   password: Yup.string()
+    .min(8, "Password must be at least 8 characters long")
+    .max(20, "Password max 20 characters long")
+    .lowercase("Password must contain at least one lowercase letter")
+    .uppercase("Password must contain at least one uppercase letter")
     .matches(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,20}$/,
+      /^(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]+$/,
       {
         message:
-          "Password must be 8-20 characters, include uppercase, lowercase, number, and special character (!@#$%^&*).",
+          "Password must contain at least one number and one special character(!@#$%^&*).",
       }
     )
     .required("Password is required"),
@@ -469,11 +473,23 @@ export default function Register() {
       // If unwrap() succeeds, the useEffect for isRegisterSuccess will handle navigation.
       // If unwrap() fails, the catch block below will handle the error state.
     } catch (err: any) {
-      // Errors from Yup validation or the mutation trigger (if unwrap fails)
-      // The useEffect for registerError will handle setting specific errors.
-      // We don't need to set loading(false) here, RTK Query handles isRegistering.
-      console.error("Caught error during handleRegister:", err);
-      // No need to duplicate error setting here, the useEffect already handles it.
+      if (err instanceof Yup.ValidationError) {
+        const newErrors: { [key: string]: string } = {};
+        err.inner.forEach((error) => {
+          if (error.path) {
+            newErrors[error.path] = error.message;
+          }
+        });
+        setErrors((prev) => ({ ...prev, ...newErrors })); // Merge with existing errors
+        setGeneralError("Please fix the form errors above."); // General message for Yup errors
+      } else if (err.name === "FetchBaseQueryError" || err.name === "SerializedError") {
+        // This part is already handled by your useEffect for registerError
+        // But it's good to keep the structure clear
+        console.error("Caught RTK Query error:", err);
+      } else {
+        console.error("An unexpected error occurred:", err);
+        setGeneralError("An unexpected error occurred. Please try again.");
+      }
     }
     // No finally block needed if RTK Query handles loading and error states
   };
@@ -681,7 +697,7 @@ const styles = StyleSheet.create({
   eyeIcon: {
     position: "absolute",
     right: 15,
-    top: 16,
+    top: 10,
     padding: 5,
     zIndex: 2,
   },
@@ -706,7 +722,7 @@ const styles = StyleSheet.create({
     height: 50,
   },
   buttonDisabled: {
-    backgroundColor: "#a8a8a8",
+    opacity: 0.6,
   },
   buttonText: {
     color: "white",
@@ -730,5 +746,6 @@ const styles = StyleSheet.create({
     color: "#648DDB",
     fontSize: 15,
     fontWeight: "600",
+    textDecorationLine: "underline",
   },
 });

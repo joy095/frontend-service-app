@@ -18,6 +18,11 @@ function RootLayoutNav() {
   // Select the isHydrated flag from your slice
   const isHydrated = useSelector((state: RootState) => state.auth.isHydrated || false);
 
+  // --- ADD THIS LOG ---
+  console.log(`[RootLayoutNav Render] isAuthenticated: ${isAuthenticated}, isHydrated: ${isHydrated}, segments: ${segments.join('/')}`);
+  // --- END ADDITION ---
+
+
   // Effect to dispatch hydration thunk on mount
   useEffect(() => {
     console.log("RootLayoutNav mounted, dispatching hydrateAuthState...");
@@ -28,7 +33,7 @@ function RootLayoutNav() {
 
   // Effect to handle redirects based on Redux auth state and current route
   useEffect(() => {
-    console.log(`[Navigation Effect] isHydrated: ${isHydrated}, isAuthenticated: ${isAuthenticated}, segments: ${segments.join('/')}`);
+    console.log(`[Navigation Effect START] isHydrated: ${isHydrated}, isAuthenticated: ${isAuthenticated}, segments: ${segments.join('/')}`);
 
     // --- Wait for Hydration to Complete ---
     // The hydration thunk must finish and set isHydrated = true for this to proceed
@@ -41,19 +46,23 @@ function RootLayoutNav() {
 
     // Determine if the current route is within the authentication group
     const inAuthGroup = segments[0] === "(auth)";
+    console.log(`[Navigation Effect] Current segment is in auth group: ${inAuthGroup}`);
 
     // --- Navigation Logic based on Redux State ---
     if (isAuthenticated && inAuthGroup) {
       // User is logged in (per Redux) AND is in the auth group, redirect to app
-      console.log("Redux state: Logged in, redirecting from auth to app...");
+      console.log("[Navigation Effect] Redux state: Logged in, current route is auth. Redirecting to app...");
       router.replace("/(screens)/profile"); // Redirect to your main app entry point
+      console.log("[Navigation Effect] Redirect to /(screens)/profile triggered.");
     } else if (!isAuthenticated && !inAuthGroup) {
       // User is NOT logged in (per Redux) AND is NOT in the auth group, redirect to auth
-      console.log("Redux state: Not logged in, redirecting from app to auth...");
+      console.log("[Navigation Effect] Redux state: Not logged in, current route is not auth. Redirecting to auth...");
       router.replace("/"); // Redirect to your main auth entry point
+      console.log("[Navigation Effect] Redirect to / triggered.");
     } else {
-      console.log("Redux state and route group match. No redirect needed.");
+      console.log("[Navigation Effect] Redux state and route group match. No redirect needed.");
     }
+    console.log("[Navigation Effect END]");
     // Depend on states and router/segments for re-evaluation
   }, [isAuthenticated, isHydrated, segments, router]);
 
@@ -80,7 +89,7 @@ function RootLayoutNav() {
     >
       {/* Define your route groups here */}
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(app)" options={{ headerShown: false }} /> {/* Assuming your app screens are in a group like this */}
+      <Stack.Screen name="(screens)" options={{ headerShown: false }} /> {/* Assuming your app screens are in a group like this */}
       {/* Add any other global routes */}
     </Stack>
   );
