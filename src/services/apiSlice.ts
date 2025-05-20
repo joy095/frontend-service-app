@@ -445,93 +445,96 @@ export const apiSlice = createApi({
     }),
 
     verifyOtp: builder.mutation<VerifyOtpResponse, VerifyOtpRequest>({
-      query: (body) => ({
-        url: "/verify-otp", // Your backend verify OTP endpoint
+      // The `query` function should now send all credentials in the body
+      query: (body) => ({ // 'body' here is the entire VerifyOtpRequest object
+        url: "/verify-otp", // CORRECT: Top-level /verify-otp route as per your backend
         method: "POST",
-        body: body,
+        body: body, // All fields (email, username, otp) go into the request body
         extraOptions: { requiresAuth: false } as BaseQueryExtraOptions, // Does not require auth (initial verification)
       }),
-      // Handle side effects after OTP verification is successful
-      async onQueryStarted(credentials, { dispatch, queryFulfilled }) {
+      async onQueryStarted(credentials, { dispatch, queryFulfilled, getState }) {
         try {
           // --- STEP 1: Receive Tokens from OTP Verification ---
-          const { data: tokens } = await queryFulfilled; // Get tokens from the response
-          console.log("OTP verification successful. Received tokens.");
-          // Tokens are now in `tokens` (VerifyOtpResponse type)
+          const { data: tokens } = await queryFulfilled;
+          console.log("OTP verification successful. Received tokens:", tokens);
 
-          // --- STEP 2: Fetch User Data using the new tokens ---
-          // Dispatch a query to fetch the user's full data using the *newly acquired* token.
-          // The baseQueryWithReauth will automatically use the token that
-          // will be saved by the subsequent `setAuthData` dispatch.
-          // We forceRefetch to ensure it doesn't use cached data from a non-authenticated state.
-          // Assuming getUser doesn't require a specific username argument if token is present,
-          // or you might need to get the username from the credentials if your getUser endpoint needs it.
-          const userResult = await dispatch(
-            // If getUser needs username from credentials:
-            // apiSlice.endpoints.getUser.initiate(credentials.username, { // Assuming username is in credentials
-            // If getUser only needs token:
-            apiSlice.endpoints.getUser.initiate(undefined, { // Or initiate() if no args needed
-              forceRefetch: true // Ensure fresh data
+          const { accessToken, refreshToken } = tokens;
+
+          // Get the currently registered user data from Redux state
+          const state = getState() as RootState;
+          const registeredUser: RegisteredUser | null = state.auth.registeredUser;
+
+          if (!registeredUser) {
+            console.error("verifyOtp onQueryStarted: No registeredUser found in state. Cannot proceed with setting auth data.");
+            dispatch(logout()); // Critical error, log out
+            return;
+          }
+
+          // --- STEP 2: Dispatch setAuthData with Tokens and INITIAL User Data ---
+          // Use registeredUser data as a temporary, initial user object.
+          // This ensures the accessToken is immediately available for the getUser call
+          // and there's some basic user info in state.
+          dispatch(
+            setAuthData({
+              tokens: {
+                accessToken: accessToken,
+                refreshToken: refreshToken,
+              },
+              // Construct a partial User object from registeredUser details
+              user: {
+                id: registeredUser.id,
+                username: registeredUser.username,
+                email: registeredUser.email,
+                firstName: registeredUser.firstName,
+                lastName: registeredUser.lastName,
+              } as User,
+              isAuthenticated: true,
             })
           );
+          console.log("Authenticated state set with tokens and initial user data from registeredUser.");
 
-          // --- STEP 3: Dispatch setAuthData with Tokens and User Data ---
-          // Check if fetching user data was successful
+          // --- STEP 3: Fetch User Data using the new tokens ---
+          // This call will now be properly authenticated because accessToken is in Redux.
+          // The username is now taken from `registeredUser.username` for the GET /user/:username call.
+          const userResult = await dispatch(
+            apiSlice.endpoints.getUser.initiate(registeredUser.username, {
+              forceRefetch: true // Ensure fresh data, bypassing cache
+            })
+          );
+          console.log("getUser initiated after OTP verification. Result:", userResult);
+
+          // --- STEP 4: Update setAuthData with Full User Data (if fetch was successful) ---
           if (userResult.isSuccess && userResult.data) {
-            // Assuming getUserResponse is { user: UserData }
-            // Extract the actual User object from the nested response structure
             const userData: User = userResult.data.user;
-            console.log("Fetched authenticated user data.");
+            console.log("Fetched full authenticated user data:", userData);
 
-
-            // Dispatch the action to set tokens & user data in Redux state and AsyncStorage
             dispatch(
               setAuthData({
                 tokens: {
-                  accessToken: tokens.accessToken,
-                  refreshToken: tokens.refreshToken,
+                  accessToken: accessToken,
+                  refreshToken: refreshToken,
                 },
                 user: userData,
-                isAuthenticated: true, // User is now fully authenticated
+                isAuthenticated: true,
               })
             );
-            console.log("Authenticated state set via setAuthData.");
+            console.log("Authenticated state updated with full user data.");
 
-            // --- Optional: Clear the registered user state from Redux state ---
-            // setAuthData reducer already clears registered state/storage, but explicit
-            // dispatch here can sometimes make component reactions clearer.
             dispatch(setRegisteredUser({ user: null, isRegistered: false }));
-            console.log("Cleared registered user state.");
+            console.log("Cleared registered user state after successful authentication.");
 
           } else {
-            // Handle the case where OTP verification succeeded (got tokens),
-            // but fetching the user profile failed.
             console.error(
-              "Failed to fetch user data after OTP verification:",
+              "Failed to fetch full user data after OTP verification:",
               userResult.error
             );
-            // You might still want to save tokens (as the user is technically logged in)
-            // but indicate that profile data couldn't be loaded.
-            dispatch(
-              setAuthData({
-                tokens: {
-                  accessToken: tokens.accessToken,
-                  refreshToken: tokens.refreshToken,
-                },
-                user: null, // User data is null as fetching failed
-                isAuthenticated: true, // User has tokens, considered authenticated
-              })
-            );
-            console.log("Authenticated state set with tokens but no user data.");
-
-            // Optionally, show an alert to the user that profile data could not be loaded
-            // Consider a mechanism to retry fetching user data later.
+            // Revert auth state if the critical getUser call fails
+            dispatch(logout());
+            console.log("getUser failed, reverting auth state and dispatched logout.");
           }
         } catch (error) {
-          console.error("OTP verification failed in onQueryStarted:", error);
-          // Handle OTP verification failure (e.g., show error message from error payload)
-          // On failure, ensure no partial auth state remains
-          dispatch(logout()); // Clear any partial state like tokens
+          console.error("OTP verification failed in onQueryStarted (top level):", error);
+          dispatch(logout());
           console.log("OTP verification failed, dispatched logout.");
         }
       },

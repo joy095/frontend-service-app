@@ -7,9 +7,7 @@ import {
   StyleSheet,
   Pressable,
   Image,
-  Platform,
   ActivityIndicator,
-  Alert, // Import Alert for API error display
 } from "react-native";
 import { Link, useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";

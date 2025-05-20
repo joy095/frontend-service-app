@@ -70,15 +70,6 @@ export default function UserProfile({ username }: UserProfileProps) {
   }
 
 
-
-  console.log("UserProfile: Data available and nested user object found. Rendering profile.");
-  console.log(" Nested user object:", user);
-  console.log(" user.username:", user.username);
-  console.log(" user.email:", user.email);
-  console.log(" user.first_name:", user.firstName);
-  console.log(" user.last_name:", user.lastName);
-
-
   // Handle logout button press
   const handleLogout = async () => {
     console.log("UserProfile: Logout button pressed.");

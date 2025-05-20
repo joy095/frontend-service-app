@@ -2,74 +2,85 @@
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
-import { Provider, useSelector, useDispatch } from "react-redux"; // Import useDispatch
-import { store, RootState, AppDispatch } from "../src/store/store"; // Import store, RootState, AppDispatch
-import { hydrateAuthState } from '../src/store/auth/authSlice'; // Import the async thunk
+import { Provider, useSelector, useDispatch } from "react-redux";
+import { store, RootState, AppDispatch } from "../src/store/store";
+import { hydrateAuthState } from '../src/store/auth/authSlice';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 // Inner component handling navigation logic (wrapped by Provider)
 function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
-  const dispatch = useDispatch<AppDispatch>(); // Get the dispatch function
+  const dispatch = useDispatch<AppDispatch>();
 
   // --- Use Redux State for Authentication and Hydration ---
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
-  // Select the isHydrated flag from your slice
   const isHydrated = useSelector((state: RootState) => state.auth.isHydrated || false);
 
-  // --- ADD THIS LOG ---
   console.log(`[RootLayoutNav Render] isAuthenticated: ${isAuthenticated}, isHydrated: ${isHydrated}, segments: ${segments.join('/')}`);
-  // --- END ADDITION ---
 
-
-  // Effect to dispatch hydration thunk on mount
+  // Effect to dispatch hydration thunk on mount - this happens only once when component first loads
   useEffect(() => {
     console.log("RootLayoutNav mounted, dispatching hydrateAuthState...");
-    // Dispatch the thunk when the component mounts.
-    // This will start the process of loading state and setting isHydrated.
     dispatch(hydrateAuthState());
-  }, [dispatch]); // Include dispatch in dependencies
+  }, [dispatch]);
 
-  // Effect to handle redirects based on Redux auth state and current route
+  // Effect to handle navigation based on auth state
   useEffect(() => {
     console.log(`[Navigation Effect START] isHydrated: ${isHydrated}, isAuthenticated: ${isAuthenticated}, segments: ${segments.join('/')}`);
 
-    // --- Wait for Hydration to Complete ---
-    // The hydration thunk must finish and set isHydrated = true for this to proceed
+    // Don't do anything until hydration is complete
     if (!isHydrated) {
       console.log("[Navigation Effect] Waiting for hydration...");
-      return; // Don't redirect until state is loaded from storage and isHydrated is true
+      return;
     }
 
-    console.log("[Navigation Effect] Hydration complete. Checking auth state.");
-
-    // Determine if the current route is within the authentication group
     const inAuthGroup = segments[0] === "(auth)";
-    console.log(`[Navigation Effect] Current segment is in auth group: ${inAuthGroup}`);
+    const inScreensGroup = segments[0] === "(screens)";
+    const isOnRoot = segments[0] === undefined; // Check if we're at the root path
 
-    // --- Navigation Logic based on Redux State ---
-    if (isAuthenticated && inAuthGroup) {
-      // User is logged in (per Redux) AND is in the auth group, redirect to app
-      console.log("[Navigation Effect] Redux state: Logged in, current route is auth. Redirecting to app...");
-      router.replace("/(screens)/profile"); // Redirect to your main app entry point
-      console.log("[Navigation Effect] Redirect to /(screens)/profile triggered.");
-    } else if (!isAuthenticated && !inAuthGroup) {
-      // User is NOT logged in (per Redux) AND is NOT in the auth group, redirect to auth
-      console.log("[Navigation Effect] Redux state: Not logged in, current route is not auth. Redirecting to auth...");
-      router.replace("/"); // Redirect to your main auth entry point
-      console.log("[Navigation Effect] Redirect to / triggered.");
+    console.log(`[Navigation Effect] Current state: isAuth: ${isAuthenticated}, Hydrated: ${isHydrated}, Segments: ${segments.join('/')}`);
+    console.log(`[Navigation Effect] Group Checks: inAuth: ${inAuthGroup}, inScreens: ${inScreensGroup}, isOnRoot: ${isOnRoot}`);
+
+
+    if (isAuthenticated) {
+      // User is authenticated
+      if (inAuthGroup || isOnRoot) {
+        // Authenticated user is on an auth screen OR the root ('/') page.
+        // Redirect them to the main app screens.
+        console.log("[Navigation Effect] Authenticated user on auth/root. Redirecting to app...");
+        router.replace("/(screens)/profile"); // Redirect to your main app screen
+      } else {
+        // Authenticated user is already in (screens) or another allowed non-auth route.
+        console.log("[Navigation Effect] Authenticated user is in correct app route. No redirect.");
+      }
     } else {
-      console.log("[Navigation Effect] Redux state and route group match. No redirect needed.");
+      // User is NOT authenticated
+      if (inAuthGroup || isOnRoot) {
+        // Unauthenticated user is on an auth screen or the root ('/').
+        // Allow them to stay here (for login/signup).
+        console.log("[Navigation Effect] Unauthenticated user on auth/root. Allowing access.");
+      } else if (inScreensGroup) {
+        // This is the CRITICAL part for logout:
+        // Unauthenticated user is trying to access a protected app screen (e.g., from logout).
+        // Redirect them forcibly to the root/login page.
+        console.log("[Navigation Effect] Unauthenticated user on protected app screen. Redirecting to root.");
+        router.replace("/");
+      } else {
+        // Catch-all for other unauthenticated access to non-auth/non-root paths.
+        // This might include routes that aren't specifically in `(auth)` or `(screens)`.
+        // For safety, redirect them to the root.
+        console.log("[Navigation Effect] Unauthenticated user on unhandled route. Redirecting to root.");
+        router.replace("/");
+      }
     }
+
     console.log("[Navigation Effect END]");
-    // Depend on states and router/segments for re-evaluation
   }, [isAuthenticated, isHydrated, segments, router]);
 
-  // Show a loading indicator while state is hydrating from storage
-  // This condition is true initially because isHydrated starts as false
+
+  // Show loading indicator while hydrating state
   if (!isHydrated) {
-    console.log("Rendering loading indicator...");
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" />
@@ -78,8 +89,6 @@ function RootLayoutNav() {
     );
   }
 
-  // Once hydrated (isHydrated is true), render the stack navigator
-  console.log("Hydration complete. Rendering Stack navigator.");
   return (
     <Stack
       screenOptions={{
@@ -87,21 +96,17 @@ function RootLayoutNav() {
         contentStyle: { backgroundColor: "white" },
       }}
     >
-      {/* Define your route groups here */}
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(screens)" options={{ headerShown: false }} /> {/* Assuming your app screens are in a group like this */}
-      {/* Add any other global routes */}
+      <Stack.Screen name="(screens)" options={{ headerShown: false }} />
     </Stack>
   );
 }
 
 // Top-level layout wrapping with Provider
 export default function RootLayout() {
-  // Keep the Provider here wrapping everything
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}> {/* Add this wrapper */}
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <Provider store={store}>
-        {/* Render the navigation logic component */}
         <RootLayoutNav />
       </Provider>
     </GestureHandlerRootView>
